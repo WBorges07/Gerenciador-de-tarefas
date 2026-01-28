@@ -16,20 +16,47 @@ headers = {
     "Prefer": "return=minimal"
 }
 
-# Configuração visual da página
-st.set_page_config(page_title="TaskFlow Pro", page_icon="☁️")
+# Configuração da página
+st.set_page_config(page_title="TaskFlow Pro", page_icon="☁️", layout="centered")
+
+# --- 2. ESTILIZAÇÃO PERSONALIZADA (CSS) ---
+st.markdown("""
+    <style>
+    /* Estilização do botão Salvar */
+    div.stButton > button:first-child {
+        background-color: #4F46E5;
+        color: white;
+        border-radius: 8px;
+        border: none;
+        padding: 0.6rem 1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #4338CA;
+        border-color: #4338CA;
+        transform: translateY(-1px);
+    }
+    /* Estilização da Barra de Progresso */
+    .stProgress > div > div > div > div {
+        background-color: #10B981;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 st.title("☁️ TaskFlow Pro")
 
-# --- 2. INTERFACE DE ENTRADA (5 EM 5 MINUTOS) ---
+# --- 3. INTERFACE DE ENTRADA ---
 with st.form("nova_tarefa", clear_on_submit=True):
-    nome = st.text_input("Tarefa", placeholder="Ex: Academia")
+    nome = st.text_input("Tarefa", placeholder="O que precisa ser feito?")
     col1, col2 = st.columns(2)
     
-    # step=300 define o intervalo de 5 minutos (300 segundos)
+    # Horários com intervalo de 5 minutos
     ini = col1.time_input("Início", step=300)
     fim = col2.time_input("Fim", step=300)
     
-    enviar = st.form_submit_button("🚀 Agendar na Nuvem", use_container_width=True)
+    # Botão renomeado para "Salvar" com estilo profissional
+    enviar = st.form_submit_button("Salvar", use_container_width=True)
 
     if enviar and nome:
         horario = f"{ini.strftime('%H:%M')} - {fim.strftime('%H:%M')}"
@@ -44,28 +71,27 @@ with st.form("nova_tarefa", clear_on_submit=True):
 
 st.divider()
 
-# --- 3. BUSCA DE DADOS ---
+# --- 4. BUSCA E EXIBIÇÃO ---
 try:
     busca = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?select=*&order=created_at", headers=headers)
     tarefas = busca.json() if busca.status_code == 200 else []
 except:
     tarefas = []
 
-# --- 4. BARRA DE PROGRESSO E LISTA ---
 if tarefas:
     # Cálculo de progresso
     total = len(tarefas)
     concluidas = sum(1 for t in tarefas if t.get('feita'))
     percentual = concluidas / total
     
-    st.subheader(f"Progresso de Hoje: {int(percentual * 100)}%")
+    st.subheader(f"Progresso: {int(percentual * 100)}%")
     st.progress(percentual)
     st.write("")
 
     for t in tarefas:
         c1, c2 = st.columns([0.1, 0.9])
         
-        # Checkbox para atualizar o status
+        # Checkbox moderno
         feita = c1.checkbox("", value=t['feita'], key=f"id_{t['id']}", label_visibility="collapsed")
         
         if feita != t['feita']:
@@ -78,8 +104,8 @@ if tarefas:
             c2.markdown(f"**{t['nome']}** — ⏰ {t['horario']}")
 
     st.write("")
-    # Botão de limpeza em massa
-    if st.button("🗑️ Limpar Tudo", use_container_width=True):
+    # Botão de limpeza secundário
+    if st.button("🗑️ Limpar Lista Completa", use_container_width=True):
         httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=not.is.null", headers=headers)
         st.rerun()
 else:
