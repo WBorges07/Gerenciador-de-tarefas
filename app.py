@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 import hashlib
 
-# --- CONFIGURAÇÃO ---
+# --- 1. CONFIGURAÇÃO DE ACESSO ---
 SUPABASE_URL = st.secrets["SUPABASE_URL"].strip("/")
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
@@ -17,32 +17,39 @@ headers = {
 
 st.set_page_config(page_title="WN Tarefas Pro", page_icon="🎯", layout="centered")
 
-# --- FUNÇÕES DE SEGURANÇA ---
+# --- 2. FUNÇÕES DE SUPORTE ---
 def hash_senha(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
 
 def realizar_login(email, senha):
-    res = httpx.get(f"{SUPABASE_URL}/rest/v1/perfis?email=eq.{email}&senha=eq.{hash_senha(senha)}", headers=headers)
-    usuarios = res.json()
-    return usuarios[0] if usuarios else None
+    try:
+        res = httpx.get(f"{SUPABASE_URL}/rest/v1/perfis?email=eq.{email}&senha=eq.{hash_senha(senha)}", headers=headers)
+        usuarios = res.json()
+        return usuarios[0] if usuarios else None
+    except: return None
 
-# --- ESTILIZAÇÃO ---
+# --- 3. ESTILIZAÇÃO CSS ---
 st.markdown("""
     <style>
-    .logo-box { background: linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%); padding: 10px 25px; border-radius: 15px; text-align: center; }
-    .logo-text { color: white !important; font-weight: 800; font-size: 30px; margin: 0; }
+    .logo-box { background: linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%); padding: 10px 25px; border-radius: 15px; text-align: center; margin-bottom: 20px; }
+    .logo-text { color: white !important; font-weight: 800; font-size: 30px; margin: 0; text-transform: uppercase; }
+    .stTabs [data-baseweb="tab-list"] { justify-content: center; }
+    div.stButton > button { border-radius: 8px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- GERENCIAMENTO DE SESSÃO (LOGIN) ---
+# --- 4. GERENCIAMENTO DE SESSÃO ---
 if "usuario" not in st.session_state:
     st.session_state.usuario = None
+if "edit_id" not in st.session_state:
+    st.session_state.edit_id = None
 
+# --- 5. TELA DE ACESSO (LOGIN/CADASTRO) ---
 if st.session_state.usuario is None:
     st.markdown('<div class="logo-box"><p class="logo-text">🎯 WN LOGIN</p></div>', unsafe_allow_html=True)
-    tab_login, tab_cad = st.tabs(["Acessar", "Criar Conta"])
+    tab_l, tab_c = st.tabs(["Acessar", "Criar Conta"])
     
-    with tab_login:
+    with tab_l:
         with st.form("login"):
             e = st.text_input("E-mail")
             s = st.text_input("Senha", type="password")
@@ -51,77 +58,121 @@ if st.session_state.usuario is None:
                 if u:
                     st.session_state.usuario = u
                     st.rerun()
-                else: st.error("Usuário ou senha inválidos")
-
-    with tab_cad:
+                else: st.error("E-mail ou senha incorretos.")
+    
+    with tab_c:
         with st.form("cadastro"):
-            novo_e = st.text_input("E-mail")
-            novo_s = st.text_input("Senha", type="password")
-            zap = st.text_input("WhatsApp (Ex: 5511999999999)")
-            if st.form_submit_button("Cadastrar"):
-                payload = {"email": novo_e, "senha": hash_senha(novo_s), "whatsapp": zap}
+            ne = st.text_input("Novo E-mail")
+            ns = st.text_input("Nova Senha", type="password")
+            nz = st.text_input("WhatsApp (DDI+DDD+Número)", placeholder="5511999999999")
+            if st.form_submit_button("Cadastrar Conta"):
+                payload = {"email": ne, "senha": hash_senha(ns), "whatsapp": nz}
                 httpx.post(f"{SUPABASE_URL}/rest/v1/perfis", headers=headers, json=payload)
-                st.success("Conta criada! Acesse a aba de Login.")
+                st.success("Conta criada! Vá para a aba 'Acessar'.")
     st.stop()
 
-# --- APP LOGADO ---
-u_id = st.session_state.usuario['email']
-u_zap = st.session_state.usuario.get('whatsapp', '')
-
-st.sidebar.write(f"Logado como: **{u_id}**")
-if st.sidebar.button("Sair"):
+# --- 6. APP LOGADO ---
+u_email = st.session_state.usuario['email']
+st.sidebar.subheader(f"Olá, {u_email.split('@')[0]}!")
+if st.sidebar.button("Sair do Sistema"):
     st.session_state.usuario = None
     st.rerun()
 
 st.markdown('<div class="logo-box"><p class="logo-text">🎯 WN TAREFAS</p></div>', unsafe_allow_html=True)
-aba1, aba2 = st.tabs(["🚀 HOJE", "📊 HISTÓRICO"])
+aba1, aba2 = st.tabs(["🚀 HOJE", "📊 ANÁLISE & BUSCA"])
 
+# --- ABA HOJE ---
 with aba1:
-    with st.form("nova_tarefa"):
-        nome = st.text_input("O que vamos fazer?")
+    # Formulário de Cadastro/Edição
+    titulo_f = "✏️ Editar Tarefa" if st.session_state.edit_id else "🆕 Nova Tarefa"
+    with st.form("form_tarefa", clear_on_submit=True):
+        st.write(f"### {titulo_f}")
+        nome = st.text_input("O que vamos realizar?", placeholder="Descrição da tarefa...")
         c1, c2 = st.columns(2)
-        ini = c1.time_input("Início")
-        fim = c2.time_input("Fim")
+        # Intervalo de 5 em 5 minutos (step=300 segundos)
+        ini = c1.time_input("Início", step=300)
+        fim = c2.time_input("Fim", step=300)
         
-        st.write("---")
-        col_zap, col_rep = st.columns(2)
-        avisar = col_zap.checkbox("🔔 Notificar no WhatsApp (15min antes)")
-        repetir = col_rep.checkbox("🔁 Repetir Diariamente")
+        ca1, ca2 = st.columns(2)
+        zap = ca1.checkbox("🔔 Avisar no WhatsApp (15min antes)")
+        rep = ca2.checkbox("🔁 Repetir Diariamente")
         
-        if st.form_submit_button("Agendar", use_container_width=True):
-            horario_ini = ini.strftime('%H:%M')
-            payload = {
-                "nome": nome, "horario": f"{horario_ini} - {fim.strftime('%H:%M')}",
-                "feita": False, "data": str(date.today()), "repetir": repetir,
-                "usuario_id": u_id, "avisar_zap": avisar
-            }
-            httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
-            # DICA: Aqui você enviaria o payload para um serviço como o n8n para agendar o Zap
-            st.rerun()
-
-    # Listagem (Filtrada por usuário)
-    try:
-        res = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_id}&data=eq.{date.today()}&order=horario.asc", headers=headers)
-        tarefas = res.json()
-        for t in tarefas:
-            c1, c2, c3 = st.columns([0.1, 0.7, 0.2])
-            f = c1.checkbox("", value=t['feita'], key=t['id'])
-            if f != t['feita']:
-                httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": f})
+        col_b1, col_b2 = st.columns(2)
+        if col_b1.form_submit_button("Salvar", use_container_width=True):
+            if nome:
+                horario = f"{ini.strftime('%H:%M')} - {fim.strftime('%H:%M')}"
+                payload = {
+                    "nome": nome, "horario": horario, "feita": False,
+                    "data": str(date.today()), "repetir": rep,
+                    "usuario_id": u_email, "avisar_zap": zap
+                }
+                if st.session_state.edit_id:
+                    httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{st.session_state.edit_id}", headers=headers, json=payload)
+                    st.session_state.edit_id = None
+                else:
+                    httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
                 st.rerun()
-            zap_icon = "🔔" if t.get('avisar_zap') else ""
-            c2.write(f"{zap_icon} **{t['nome']}** ({t['horario']})")
-            if c3.button("🗑️", key=f"del_{t['id']}"):
+
+        if st.session_state.edit_id:
+            if col_b2.form_submit_button("Cancelar Edição", use_container_width=True):
+                st.session_state.edit_id = None
+                st.rerun()
+
+    st.divider()
+
+    # Listagem de Hoje
+    try:
+        query = f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_email}&or=(data.eq.{date.today()},repetir.eq.true)&order=horario.asc"
+        tarefas = httpx.get(query, headers=headers).json()
+        
+        for t in tarefas:
+            col_f, col_t, col_o = st.columns([0.1, 0.6, 0.3])
+            
+            # Checkbox Status
+            status = col_f.checkbox("", value=t['feita'], key=f"check_{t['id']}", label_visibility="collapsed")
+            if status != t['feita']:
+                httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": status})
+                st.rerun()
+            
+            # Texto da Tarefa
+            txt = f"~~{t['nome']}~~" if t['feita'] else f"**{t['nome']}**"
+            zap_icon = "🔔" if t['avisar_zap'] else ""
+            rep_icon = "🔁" if t['repetir'] else ""
+            col_t.markdown(f"{txt} {zap_icon}{rep_icon} <br><small>⏰ {t['horario']}</small>", unsafe_allow_html=True)
+            
+            # Operações (Editar e Deletar)
+            b_ed, b_de = col_o.columns(2)
+            if b_ed.button("✏️", key=f"ed_{t['id']}"):
+                st.session_state.edit_id = t['id']
+                st.rerun()
+            if b_de.button("🗑️", key=f"del_{t['id']}"):
                 httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers)
                 st.rerun()
-    except: st.write("Inicie sua jornada!")
+    except: st.info("Crie sua primeira tarefa para começar!")
 
+# --- ABA HISTÓRICO E ANÁLISE ---
 with aba2:
-    st.subheader("Seu Histórico")
-    # Gráfico simples de barras
-    res_hist = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_id}&feita=eq.true", headers=headers)
-    df = pd.DataFrame(res_hist.json())
-    if not df.empty:
-        df_count = df.groupby('data').size()
-        st.bar_chart(df_count)
-    else: st.write("Sem dados para exibir ainda.")
+    st.subheader("🔍 Busca & Filtros")
+    c_busca, c_data = st.columns([0.6, 0.4])
+    termo = c_busca.text_input("Procurar tarefa...")
+    dt_f = c_data.date_input("Filtrar por data", value=date.today())
+    
+    try:
+        res_h = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_email}&data=eq.{dt_f}&order=horario.asc", headers=headers).json()
+        if termo:
+            res_h = [t for t in res_h if termo.lower() in t['nome'].lower()]
+        
+        for t in res_h:
+            st.write(f"{'✅' if t['feita'] else '⏳'} **{t['horario']}** - {t['nome']}")
+    except: pass
+
+    st.divider()
+    st.subheader("📈 Desempenho (Últimos 7 dias)")
+    try:
+        limite = str(date.today() - timedelta(days=7))
+        res_g = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_email}&data=gte.{limite}&feita=eq.true", headers=headers).json()
+        if res_g:
+            df = pd.DataFrame(res_g)
+            df['data'] = pd.to_datetime(df['data']).dt.strftime('%d/%m')
+            st.bar_chart(df.groupby('data').size(), color="#4F46E5")
+    except: st.write("Ainda sem dados para o gráfico.")
