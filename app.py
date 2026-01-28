@@ -4,9 +4,13 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 import hashlib
 
-# --- 1. CONFIGURAÇÃO DE ACESSO ---
-SUPABASE_URL = st.secrets["SUPABASE_URL"].strip("/")
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+# --- 1. CONFIGURAÇÃO DE ACESSO (SECRETS) ---
+try:
+    SUPABASE_URL = st.secrets["SUPABASE_URL"].strip("/")
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except Exception:
+    st.error("Erro: Credenciais não encontradas nos Secrets.")
+    st.stop()
 
 headers = {
     "apikey": SUPABASE_KEY,
@@ -17,7 +21,7 @@ headers = {
 
 st.set_page_config(page_title="WN Tarefas Pro", page_icon="🎯", layout="centered")
 
-# --- 2. FUNÇÕES DE SUPORTE ---
+# --- 2. FUNÇÕES DE SEGURANÇA ---
 def hash_senha(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
 
@@ -32,7 +36,7 @@ def realizar_login(email, senha):
 st.markdown("""
     <style>
     .logo-box { background: linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%); padding: 10px 25px; border-radius: 15px; text-align: center; margin-bottom: 20px; }
-    .logo-text { color: white !important; font-weight: 800; font-size: 30px; margin: 0; text-transform: uppercase; }
+    .logo-text { color: white !important; font-weight: 800; font-size: 30px; margin: 0; text-transform: uppercase; letter-spacing: -1px; }
     .stTabs [data-baseweb="tab-list"] { justify-content: center; }
     div.stButton > button { border-radius: 8px; }
     </style>
@@ -64,11 +68,10 @@ if st.session_state.usuario is None:
         with st.form("cadastro"):
             ne = st.text_input("Novo E-mail")
             ns = st.text_input("Nova Senha", type="password")
-            nz = st.text_input("WhatsApp (DDI+DDD+Número)", placeholder="5511999999999")
-            if st.form_submit_button("Cadastrar Conta"):
-                payload = {"email": ne, "senha": hash_senha(ns), "whatsapp": nz}
+            if st.form_submit_button("Cadastrar Conta", use_container_width=True):
+                payload = {"email": ne, "senha": hash_senha(ns)}
                 httpx.post(f"{SUPABASE_URL}/rest/v1/perfis", headers=headers, json=payload)
-                st.success("Conta criada! Vá para a aba 'Acessar'.")
+                st.success("Conta criada com sucesso! Acesse a aba 'Acessar'.")
     st.stop()
 
 # --- 6. APP LOGADO ---
@@ -83,19 +86,16 @@ aba1, aba2 = st.tabs(["🚀 HOJE", "📊 ANÁLISE & BUSCA"])
 
 # --- ABA HOJE ---
 with aba1:
-    # Formulário de Cadastro/Edição
     titulo_f = "✏️ Editar Tarefa" if st.session_state.edit_id else "🆕 Nova Tarefa"
     with st.form("form_tarefa", clear_on_submit=True):
         st.write(f"### {titulo_f}")
-        nome = st.text_input("O que vamos realizar?", placeholder="Descrição da tarefa...")
+        nome = st.text_input("O que vamos realizar?", placeholder="Ex: Academia, Reunião...")
         c1, c2 = st.columns(2)
-        # Intervalo de 5 em 5 minutos (step=300 segundos)
+        # Intervalo de 5 em 5 minutos
         ini = c1.time_input("Início", step=300)
         fim = c2.time_input("Fim", step=300)
         
-        ca1, ca2 = st.columns(2)
-        zap = ca1.checkbox("🔔 Avisar no WhatsApp (15min antes)")
-        rep = ca2.checkbox("🔁 Repetir Diariamente")
+        rep = st.checkbox("🔁 Repetir esta tarefa diariamente")
         
         col_b1, col_b2 = st.columns(2)
         if col_b1.form_submit_button("Salvar", use_container_width=True):
@@ -104,7 +104,7 @@ with aba1:
                 payload = {
                     "nome": nome, "horario": horario, "feita": False,
                     "data": str(date.today()), "repetir": rep,
-                    "usuario_id": u_email, "avisar_zap": zap
+                    "usuario_id": u_email
                 }
                 if st.session_state.edit_id:
                     httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{st.session_state.edit_id}", headers=headers, json=payload)
@@ -120,7 +120,7 @@ with aba1:
 
     st.divider()
 
-    # Listagem de Hoje
+    # Listagem de Hoje organizada por horário
     try:
         query = f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_email}&or=(data.eq.{date.today()},repetir.eq.true)&order=horario.asc"
         tarefas = httpx.get(query, headers=headers).json()
@@ -136,11 +136,10 @@ with aba1:
             
             # Texto da Tarefa
             txt = f"~~{t['nome']}~~" if t['feita'] else f"**{t['nome']}**"
-            zap_icon = "🔔" if t['avisar_zap'] else ""
-            rep_icon = "🔁" if t['repetir'] else ""
-            col_t.markdown(f"{txt} {zap_icon}{rep_icon} <br><small>⏰ {t['horario']}</small>", unsafe_allow_html=True)
+            rep_icon = "🔁" if t.get('repetir') else ""
+            col_t.markdown(f"{txt} {rep_icon} <br><small>⏰ {t['horario']}</small>", unsafe_allow_html=True)
             
-            # Operações (Editar e Deletar)
+            # Operações
             b_ed, b_de = col_o.columns(2)
             if b_ed.button("✏️", key=f"ed_{t['id']}"):
                 st.session_state.edit_id = t['id']
@@ -148,26 +147,31 @@ with aba1:
             if b_de.button("🗑️", key=f"del_{t['id']}"):
                 httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers)
                 st.rerun()
-    except: st.info("Crie sua primeira tarefa para começar!")
+    except:
+        st.info("Nenhuma tarefa para exibir.")
 
-# --- ABA HISTÓRICO E ANÁLISE ---
+# --- ABA ANÁLISE & BUSCA ---
 with aba2:
-    st.subheader("🔍 Busca & Filtros")
+    st.subheader("🔍 Localizar Tarefas")
     c_busca, c_data = st.columns([0.6, 0.4])
-    termo = c_busca.text_input("Procurar tarefa...")
-    dt_f = c_data.date_input("Filtrar por data", value=date.today())
+    termo = c_busca.text_input("Pesquisar nome...")
+    dt_f = c_data.date_input("Filtrar por dia", value=date.today())
     
     try:
         res_h = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_email}&data=eq.{dt_f}&order=horario.asc", headers=headers).json()
         if termo:
             res_h = [t for t in res_h if termo.lower() in t['nome'].lower()]
         
-        for t in res_h:
-            st.write(f"{'✅' if t['feita'] else '⏳'} **{t['horario']}** - {t['nome']}")
+        if res_h:
+            for t in res_h:
+                status = "✅" if t['feita'] else "⏳"
+                st.write(f"{status} **{t['horario']}** - {t['nome']}")
+        else:
+            st.write("Nenhum registro encontrado.")
     except: pass
 
     st.divider()
-    st.subheader("📈 Desempenho (Últimos 7 dias)")
+    st.subheader("📈 Produtividade Semanal")
     try:
         limite = str(date.today() - timedelta(days=7))
         res_g = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_email}&data=gte.{limite}&feita=eq.true", headers=headers).json()
@@ -175,4 +179,5 @@ with aba2:
             df = pd.DataFrame(res_g)
             df['data'] = pd.to_datetime(df['data']).dt.strftime('%d/%m')
             st.bar_chart(df.groupby('data').size(), color="#4F46E5")
-    except: st.write("Ainda sem dados para o gráfico.")
+    except:
+        st.write("Ainda não há dados suficientes para gerar o gráfico.")
