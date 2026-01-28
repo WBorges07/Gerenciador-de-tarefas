@@ -1,33 +1,36 @@
 import streamlit as st
 import httpx
 
-# --- CONFIGURAÇÃO DE ACESSO (Substitua pelos seus dados) ---
-# Certifique-se de que a URL comece com https://
-SUPABASE_URL = "https://jwbzparfvgifpenxanfw.supabase.co" 
-# Use a sua chave 'anon' public do painel API Keys
-SUPABASE_KEY = "sb_publishable_8CT2OX2RrjepZ1yQHIpBDA_d43P66k-" 
+# --- CONFIGURAÇÃO DE ACESSO SEGURO ---
+# O Streamlit vai buscar estes dados na aba 'Settings > Secrets' do seu painel online
+try:
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except Exception:
+    # Caso você esteja rodando localmente e ainda não configurou secrets
+    SUPABASE_URL = "https://jwbzparfvgifpenxanfw.supabase.co"
+    SUPABASE_KEY = "SUA_CHAVE_ANON_AQUI"
 
 headers = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
 }
 
-# Configuração da página
-st.set_page_config(page_title="TaskFlow Pro", page_icon="✅", layout="centered")
+# Configuração visual da página
+st.set_page_config(page_title="TaskFlow Pro", page_icon="☁️", layout="centered")
 
-# Estilo visual moderno
 st.markdown("""
     <style>
-    .stCheckbox { font-size: 20px; }
-    .main { background-color: #0e1117; }
+    .stCheckbox { font-size: 22px; }
     div[data-testid="stMetricValue"] { color: #4ade80; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("☁️ TaskFlow Pro")
 
-# --- ÁREA DE ENTRADA DE TAREFAS ---
+# --- 1. INTERFACE DE ENTRADA ---
 with st.container():
     col1, col2, col3 = st.columns([2, 1, 1])
     nome = col1.text_input("Tarefa", placeholder="Ex: Academia")
@@ -37,79 +40,57 @@ with st.container():
     if st.button("🚀 Agendar na Nuvem", use_container_width=True):
         if nome:
             horario_formatado = f"{ini.strftime('%H:%M')} - {fim.strftime('%H:%M')}"
-            dados_tarefa = {
-                "nome": nome, 
-                "horario": horario_formatado, 
-                "feita": False
-            }
+            dados_tarefa = {"nome": nome, "horario": horario_formatado, "feita": False}
             
-            try:
-                # Envia para a tabela 'tarefas' no Supabase
-                envio = httpx.post(
-                    f"{SUPABASE_URL}/rest/v1/tarefas", 
-                    headers=headers, 
-                    json=dados_tarefa
-                )
-                
-                if envio.status_code in [200, 201]:
-                    st.success("Tarefa salva com sucesso!")
-                    st.rerun()
-                else:
-                    st.error(f"Erro ao salvar: {envio.text}")
-            except Exception as e:
-                st.error(f"Erro de conexão: {e}")
+            envio = httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=dados_tarefa)
+            if envio.status_code in [200, 201]:
+                st.rerun()
         else:
-            st.warning("Por favor, digite o nome da tarefa.")
+            st.warning("Digite o nome da tarefa.")
 
 st.divider()
 
-# --- BUSCA E EXIBIÇÃO DAS TAREFAS ---
+# --- 2. BUSCA DE DADOS NO SUPABASE ---
 try:
-    response = httpx.get(
-        f"{SUPABASE_URL}/rest/v1/tarefas?select=*&order=created_at", 
-        headers=headers
-    )
+    response = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?select=*&order=created_at", headers=headers)
     tarefas = response.json() if response.status_code == 200 else []
-except Exception as e:
-    st.error(f"Não foi possível carregar as tarefas: {e}")
+except:
     tarefas = []
 
-# --- LÓGICA DA BARRA DE PROGRESSO ---
+# --- 3. EXIBIÇÃO E PROGRESSO ---
 if tarefas:
     total = len(tarefas)
-    concluidas = sum(1 for t in tarefas if t.get('feita') is True)
+    concluidas = sum(1 for t in tarefas if t.get('feita'))
     percentual = concluidas / total
     
     st.subheader(f"Progresso de Hoje: {int(percentual * 100)}%")
     st.progress(percentual)
     
-    st.write("") # Espaçamento visual
-
     for t in tarefas:
         c1, c2 = st.columns([0.1, 0.9])
         
-        status_atual = t.get('feita', False)
-        # Checkbox para marcar como feita
-        check = c1.checkbox("", value=status_atual, key=str(t['id']), label_visibility="collapsed")
+        # Checkbox para atualizar status
+        feita = c1.checkbox("", value=t['feita'], key=f"check_{t['id']}", label_visibility="collapsed")
         
-        # Se o usuário clicar no checkbox, atualiza o banco de dados
-        if check != status_atual:
-            httpx.patch(
-                f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", 
-                headers=headers, 
-                json={"feita": check}
-            )
+        if feita != t['feita']:
+            httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": feita})
             st.rerun()
             
-        # Texto da tarefa (Riscado se estiver pronta)
-        if status_atual:
-            c2.markdown(f"<span style='color: gray; text-decoration: line-through;'>{t['nome']} ({t['horario']})</span>", unsafe_allow_html=True)
+        # Texto riscado se concluído
+        if t['feita']:
+            c2.markdown(f"~~{t['nome']} ({t['horario']})~~", unsafe_allow_html=True)
         else:
             c2.markdown(f"**{t['nome']}** — ⏰ {t['horario']}")
-            
-    # Botão para limpar o banco de dados
-    if st.button("🗑️ Limpar todas as tarefas"):
-        httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?select=*", headers=headers)
-        st.rerun()
+
+    st.write("")
+    # --- 4. BOTÃO DE LIMPAR (CORRIGIDO) ---
+    if st.button("🗑️ Limpar todas as tarefas", use_container_width=False):
+        # Usamos id=not.is.null para o Supabase aceitar o DELETE em massa
+        limpeza = httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=not.is.null", headers=headers)
+        if limpeza.status_code in [200, 204]:
+            st.success("Lista limpa!")
+            st.rerun()
+        else:
+            st.error("Erro ao limpar banco. Verifique o SQL Editor.")
 else:
-    st.info("Sua lista está vazia! Adicione uma tarefa acima para começar.")
+    st.info("Sua lista está vazia! Adicione uma tarefa acima.")
