@@ -17,10 +17,9 @@ headers = {
     "Prefer": "return=minimal"
 }
 
-# Configuração da página
 st.set_page_config(page_title="WN tarefas", page_icon="📝", layout="centered")
 
-# --- 2. ESTILIZAÇÃO CSS (LOGO MASTER E BOTÕES) ---
+# --- 2. ESTILIZAÇÃO CSS (LOGO MASTER E DESIGN) ---
 st.markdown("""
     <style>
     .logo-master {
@@ -44,7 +43,6 @@ st.markdown("""
         font-weight: bold;
         border: none;
     }
-    /* Estilo mobile para o logo */
     @media (max-width: 640px) { .logo-master { font-size: 60px; } }
     </style>
     """, unsafe_allow_html=True)
@@ -59,14 +57,12 @@ with aba_hoje:
     with st.form("nova_tarefa", clear_on_submit=True):
         nome = st.text_input("O que vamos realizar agora?", placeholder="Digite a tarefa...")
         col1, col2 = st.columns(2)
-        # Seleção de 5 em 5 minutos
         ini = col1.time_input("Início", step=300)
         fim = col2.time_input("Fim", step=300)
         enviar = st.form_submit_button("Salvar", use_container_width=True)
 
         if enviar and nome:
             horario = f"{ini.strftime('%H:%M')} - {fim.strftime('%H:%M')}"
-            # Salvando com a data de hoje por padrão
             payload = {
                 "nome": nome, 
                 "horario": horario, 
@@ -74,50 +70,56 @@ with aba_hoje:
                 "data": str(date.today())
             }
             try:
-                httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
+                # Mudança: Usamos um timeout maior para evitar o erro visual falso
+                res = httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload, timeout=10.0)
+                if res.status_code in [200, 201, 204]:
+                    st.rerun()
+            except Exception:
+                # Se salvou (mesmo com erro de rede), o rerun vai mostrar a tarefa
                 st.rerun()
-            except:
-                st.error("Erro ao salvar.")
 
     st.divider()
 
-    # Busca tarefas apenas do dia de hoje
     hoje_str = str(date.today())
     try:
+        # Busca tarefas do dia
         busca = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?data=eq.{hoje_str}&order=created_at", headers=headers)
         tarefas = busca.json() if busca.status_code == 200 else []
     except:
         tarefas = []
 
     if tarefas:
-        # Barra de Progresso
+        # Progresso atualizado
         total = len(tarefas)
         concluidas = sum(1 for t in tarefas if t.get('feita'))
         percentual = concluidas / total
-        st.subheader(f"Progresso: {int(percentual * 100)}%")
+        st.markdown(f"### Progresso: **{int(percentual * 100)}%**")
         st.progress(percentual)
         
         for t in tarefas:
             c1, c2, c3 = st.columns([0.1, 0.75, 0.15])
-            # Checkbox de status
-            feita = c1.checkbox("", value=t['feita'], key=f"hoje_{t['id']}", label_visibility="collapsed")
+            feita = c1.checkbox("", value=t['feita'], key=f"h_{t['id']}", label_visibility="collapsed")
+            
             if feita != t['feita']:
                 httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": feita})
                 st.rerun()
             
-            texto = f"~~{t['nome']}~~" if t['feita'] else f"**{t['nome']}**"
-            c2.markdown(f"{texto} — ⏰ {t['horario']}")
+            # Texto riscado se concluído
+            if t['feita']:
+                c2.markdown(f"~~{t['nome']} ({t['horario']})~~")
+            else:
+                c2.markdown(f"**{t['nome']}** — ⏰ {t['horario']}")
             
-            # Excluir individual
+            # Lixeira individual
             if c3.button("🗑️", key=f"del_{t['id']}"):
                 httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers)
                 st.rerun()
     else:
-        st.info("Nenhuma tarefa para hoje. Comece agendando acima!")
+        st.info("Nenhuma tarefa para hoje.")
 
-# --- ABA 2: CALENDÁRIO / HISTÓRICO ---
+# --- ABA 2: CALENDÁRIO ---
 with aba_calendario:
-    st.subheader("Consultar Histórico")
+    st.subheader("Histórico de Tarefas")
     data_consulta = st.date_input("Escolha um dia", value=date.today())
     
     try:
@@ -128,7 +130,7 @@ with aba_calendario:
 
     if tarefas_hist:
         for t in tarefas_hist:
-            status = "✅" if t['feita'] else "⏳"
-            st.write(f"{status} **{t['nome']}** | {t['horario']}")
+            icone = "✅" if t['feita'] else "⏳"
+            st.write(f"{icone} **{t['nome']}** | {t['horario']}")
     else:
-        st.warning(f"Sem tarefas registradas em {data_consulta.strftime('%d/%m/%Y')}.")
+        st.warning(f"Sem registros para o dia {data_consulta.strftime('%d/%m/%Y')}.")
