@@ -16,16 +16,19 @@ headers = {
     "Prefer": "return=minimal"
 }
 
-# Configuração da página
+# Configuração visual da página
 st.set_page_config(page_title="TaskFlow Pro", page_icon="☁️")
 st.title("☁️ TaskFlow Pro")
 
-# --- 2. INTERFACE DE ENTRADA (FORMULÁRIO) ---
+# --- 2. INTERFACE DE ENTRADA (5 EM 5 MINUTOS) ---
 with st.form("nova_tarefa", clear_on_submit=True):
     nome = st.text_input("Tarefa", placeholder="Ex: Academia")
     col1, col2 = st.columns(2)
-    ini = col1.time_input("Início")
-    fim = col2.time_input("Fim")
+    
+    # step=300 define o intervalo de 5 minutos (300 segundos)
+    ini = col1.time_input("Início", step=300)
+    fim = col2.time_input("Fim", step=300)
+    
     enviar = st.form_submit_button("🚀 Agendar na Nuvem", use_container_width=True)
 
     if enviar and nome:
@@ -36,25 +39,25 @@ with st.form("nova_tarefa", clear_on_submit=True):
             res = httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
             if res.status_code in [200, 201]:
                 st.rerun()
-        except Exception as e:
+        except Exception:
             st.error("Erro ao conectar ao banco de dados.")
 
 st.divider()
 
-# --- 3. BUSCA E EXIBIÇÃO DE TAREFAS ---
+# --- 3. BUSCA DE DADOS ---
 try:
     busca = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?select=*&order=created_at", headers=headers)
     tarefas = busca.json() if busca.status_code == 200 else []
 except:
     tarefas = []
 
-# --- 4. LÓGICA DA BARRA DE PROGRESSO ---
+# --- 4. BARRA DE PROGRESSO E LISTA ---
 if tarefas:
+    # Cálculo de progresso
     total = len(tarefas)
     concluidas = sum(1 for t in tarefas if t.get('feita'))
     percentual = concluidas / total
     
-    # Exibe a barra e o texto que haviam sumido
     st.subheader(f"Progresso de Hoje: {int(percentual * 100)}%")
     st.progress(percentual)
     st.write("")
@@ -75,7 +78,7 @@ if tarefas:
             c2.markdown(f"**{t['nome']}** — ⏰ {t['horario']}")
 
     st.write("")
-    # Botão de limpeza corrigido
+    # Botão de limpeza em massa
     if st.button("🗑️ Limpar Tudo", use_container_width=True):
         httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=not.is.null", headers=headers)
         st.rerun()
