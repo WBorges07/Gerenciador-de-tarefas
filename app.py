@@ -17,15 +17,28 @@ headers = {
 }
 
 # Configuração da página
-st.set_page_config(page_title="TaskFlow Pro", page_icon="☁️", layout="centered")
+st.set_page_config(page_title="WN tarefas", page_icon="📝", layout="centered")
 
-# --- 2. ESTILIZAÇÃO PERSONALIZADA (CSS) ---
+# --- 2. ESTILIZAÇÃO PERSONALIZADA (CSS PRO) ---
 st.markdown("""
     <style>
+    /* Estilização do Logotipo WN tarefas */
+    .logo-text {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 800;
+        font-size: 42px;
+        background: -webkit-linear-gradient(#4F46E5, #06B6D4);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    
+    /* Botão Salvar Principal */
     div.stButton > button:first-child {
         background-color: #4F46E5;
         color: white;
-        border-radius: 8px;
+        border-radius: 10px;
         border: none;
         padding: 0.6rem 1rem;
         font-weight: 600;
@@ -33,14 +46,16 @@ st.markdown("""
     }
     div.stButton > button:first-child:hover {
         background-color: #4338CA;
-        transform: translateY(-1px);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
     }
-    /* Estilo para o botão de excluir unitário */
+
+    /* Botão de Excluir (Lixeira) */
     .stButton button[kind="secondary"] {
         background-color: transparent;
         color: #EF4444;
         border: 1px solid #EF4444;
-        padding: 0.2rem 0.5rem;
+        border-radius: 6px;
     }
     .stButton button[kind="secondary"]:hover {
         background-color: #EF4444;
@@ -49,12 +64,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("☁️ TaskFlow Pro")
+# Título Estilizado
+st.markdown('<p class="logo-text">WN tarefas</p>', unsafe_allow_html=True)
 
 # --- 3. INTERFACE DE ENTRADA ---
 with st.form("nova_tarefa", clear_on_submit=True):
-    nome = st.text_input("Tarefa", placeholder="O que precisa ser feito?")
+    nome = st.text_input("Tarefa", placeholder="O que vamos fazer hoje?")
     col1, col2 = st.columns(2)
+    # Seleção de 5 em 5 minutos
     ini = col1.time_input("Início", step=300)
     fim = col2.time_input("Fim", step=300)
     enviar = st.form_submit_button("Salvar", use_container_width=True)
@@ -66,7 +83,7 @@ with st.form("nova_tarefa", clear_on_submit=True):
             httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
             st.rerun()
         except:
-            st.error("Erro ao conectar ao banco.")
+            st.error("Erro na conexão com o banco.")
 
 st.divider()
 
@@ -78,16 +95,16 @@ except:
     tarefas = []
 
 if tarefas:
-    # Barra de Progresso
+    # Progresso e Barra
     total = len(tarefas)
     concluidas = sum(1 for t in tarefas if t.get('feita'))
     percentual = concluidas / total
+    
     st.subheader(f"Progresso: {int(percentual * 100)}%")
     st.progress(percentual)
     st.write("")
 
     for t in tarefas:
-        # Criamos 3 colunas: Checkbox, Texto da Tarefa e Botão de Excluir
         c1, c2, c3 = st.columns([0.1, 0.75, 0.15])
         
         # Checkbox de status
@@ -96,14 +113,14 @@ if tarefas:
             httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": feita})
             st.rerun()
             
-        # Nome da tarefa
+        # Texto da Tarefa
         if t['feita']:
             c2.markdown(f"~~{t['nome']} ({t['horario']})~~")
         else:
             c2.markdown(f"**{t['nome']}** — ⏰ {t['horario']}")
             
-        # Botão de Excluir individual
-        if c3.button("🗑️", key=f"del_{t['id']}", help="Excluir esta tarefa"):
+        # Excluir Item por Item
+        if c3.button("🗑️", key=f"del_{t['id']}"):
             httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers)
             st.rerun()
 
@@ -112,4 +129,4 @@ if tarefas:
         httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=not.is.null", headers=headers)
         st.rerun()
 else:
-    st.info("Sua lista está vazia!")
+    st.info("Nenhuma tarefa pendente.")
