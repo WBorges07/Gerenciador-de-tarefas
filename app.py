@@ -21,7 +21,7 @@ headers = {
 
 st.set_page_config(page_title="WN Tarefas Pro", page_icon="🎯", layout="centered")
 
-# --- 2. FUNÇÕES DE SEGURANÇA ---
+# --- 2. FUNÇÕES DE SUPORTE ---
 def hash_senha(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
 
@@ -39,6 +39,7 @@ st.markdown("""
     .logo-text { color: white !important; font-weight: 800; font-size: 30px; margin: 0; text-transform: uppercase; letter-spacing: -1px; }
     .stTabs [data-baseweb="tab-list"] { justify-content: center; }
     div.stButton > button { border-radius: 8px; }
+    .progress-label { font-size: 14px; font-weight: 600; margin-bottom: 5px; color: #4F46E5; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -86,12 +87,35 @@ aba1, aba2 = st.tabs(["🚀 HOJE", "📊 ANÁLISE & BUSCA"])
 
 # --- ABA HOJE ---
 with aba1:
+    # --- BARRA DE PROGRESSO ---
+    try:
+        query_total = f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_email}&or=(data.eq.{date.today()},repetir.eq.true)"
+        res_total = httpx.get(query_total, headers=headers).json()
+        
+        if res_total:
+            total = len(res_total)
+            concluidas = len([t for t in res_total if t['feita']])
+            percentual = concluidas / total
+            
+            st.markdown(f'<p class="progress-label">Progresso do Dia: {concluidas}/{total} ({int(percentual*100)}%)</p>', unsafe_allow_html=True)
+            st.progress(percentual)
+            
+            if percentual == 1.0:
+                st.success("🌟 Incrível! Você completou todas as tarefas de hoje!")
+                st.balloons()
+        else:
+            st.info("Adicione sua primeira tarefa para ver seu progresso!")
+    except:
+        pass
+
+    st.divider()
+
+    # Formulário de Cadastro/Edição
     titulo_f = "✏️ Editar Tarefa" if st.session_state.edit_id else "🆕 Nova Tarefa"
     with st.form("form_tarefa", clear_on_submit=True):
         st.write(f"### {titulo_f}")
         nome = st.text_input("O que vamos realizar?", placeholder="Ex: Academia, Reunião...")
         c1, c2 = st.columns(2)
-        # Intervalo de 5 em 5 minutos
         ini = c1.time_input("Início", step=300)
         fim = c2.time_input("Fim", step=300)
         
@@ -120,26 +144,23 @@ with aba1:
 
     st.divider()
 
-    # Listagem de Hoje organizada por horário
-    try:
-        query = f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_email}&or=(data.eq.{date.today()},repetir.eq.true)&order=horario.asc"
-        tarefas = httpx.get(query, headers=headers).json()
+    # Listagem de Hoje organizada por horário (Usamos a variável 'res_total' já carregada acima)
+    if res_total:
+        # Ordenar localmente por horário para garantir a ordem na exibição
+        tarefas_ordenadas = sorted(res_total, key=lambda x: x['horario'])
         
-        for t in tarefas:
+        for t in tarefas_ordenadas:
             col_f, col_t, col_o = st.columns([0.1, 0.6, 0.3])
             
-            # Checkbox Status
             status = col_f.checkbox("", value=t['feita'], key=f"check_{t['id']}", label_visibility="collapsed")
             if status != t['feita']:
                 httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": status})
                 st.rerun()
             
-            # Texto da Tarefa
             txt = f"~~{t['nome']}~~" if t['feita'] else f"**{t['nome']}**"
             rep_icon = "🔁" if t.get('repetir') else ""
             col_t.markdown(f"{txt} {rep_icon} <br><small>⏰ {t['horario']}</small>", unsafe_allow_html=True)
             
-            # Operações
             b_ed, b_de = col_o.columns(2)
             if b_ed.button("✏️", key=f"ed_{t['id']}"):
                 st.session_state.edit_id = t['id']
@@ -147,8 +168,6 @@ with aba1:
             if b_de.button("🗑️", key=f"del_{t['id']}"):
                 httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers)
                 st.rerun()
-    except:
-        st.info("Nenhuma tarefa para exibir.")
 
 # --- ABA ANÁLISE & BUSCA ---
 with aba2:
