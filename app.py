@@ -6,7 +6,7 @@ try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].strip("/")
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 except Exception:
-    st.error("Erro: Credenciais não encontradas.")
+    st.error("Erro: Credenciais não encontradas nos Secrets.")
     st.stop()
 
 headers = {
@@ -19,31 +19,29 @@ headers = {
 # Configuração da página
 st.set_page_config(page_title="WN tarefas", page_icon="📝", layout="centered")
 
-# --- 2. ESTILIZAÇÃO PERSONALIZADA (CSS LOGO MASTER) ---
+# --- 2. ESTILIZAÇÃO PERSONALIZADA (CSS PARA LOGO GIGANTE) ---
 st.markdown("""
     <style>
-    /* Reset de margens superiores do Streamlit */
-    .block-container { padding-top: 2rem; }
-    
-    /* Logotipo WN tarefas - Estilo Imponente */
-    .logo-master {
-        font-family: 'Arial Black', Gadget, sans-serif;
-        font-weight: 900;
-        font-size: 110px; /* Tamanho Extremo */
-        line-height: 0.9;
-        letter-spacing: -6px;
-        text-align: center;
-        background: linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.2));
-        margin: 40px 0;
-        text-transform: uppercase;
+    /* Container para dar espaço ao logo */
+    .main-logo-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 60px 0; /* Aumenta o respiro em volta do logo */
     }
     
-    /* Ajuste para telas pequenas (Mobile) */
-    @media (max-width: 640px) {
-        .logo-master { font-size: 60px; letter-spacing: -3px; }
+    /* WN tarefas em tamanho máximo */
+    .massive-logo {
+        font-family: 'Inter', sans-serif;
+        font-weight: 900;
+        font-size: 85px; /* Tamanho massivo para impacto total */
+        letter-spacing: -4px;
+        line-height: 1;
+        background: linear-gradient(90deg, #4F46E5, #06B6D4);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        text-transform: uppercase; /* Deixa o logo mais robusto */
     }
 
     /* Botão Salvar Estilizado */
@@ -51,20 +49,25 @@ st.markdown("""
         background-color: #4F46E5;
         color: white;
         border-radius: 12px;
-        height: 3.5rem;
-        font-weight: bold;
-        font-size: 1.2rem;
         border: none;
+        height: 50px;
+        font-size: 18px;
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #4338CA;
+        transform: scale(1.02);
     }
     </style>
     """, unsafe_allow_html=True)
 
-# Exibição do Logotipo Master
-st.markdown('<h1 class="logo-master">WN<br>TAREFAS</h1>', unsafe_allow_html=True)
+# Aplicação do Logotipo Gigante
+st.markdown('<div class="main-logo-container"><h1 class="massive-logo">WN TAREFAS</h1></div>', unsafe_allow_html=True)
 
 # --- 3. INTERFACE DE ENTRADA ---
 with st.form("nova_tarefa", clear_on_submit=True):
-    nome = st.text_input("O que vamos realizar agora?", placeholder="Digite aqui...")
+    nome = st.text_input("Tarefa", placeholder="O que vamos realizar agora?")
     col1, col2 = st.columns(2)
     # Seleção de 5 em 5 minutos
     ini = col1.time_input("Início", step=300)
@@ -75,8 +78,8 @@ with st.form("nova_tarefa", clear_on_submit=True):
         horario = f"{ini.strftime('%H:%M')} - {fim.strftime('%H:%M')}"
         payload = {"nome": nome, "horario": horario, "feita": False}
         try:
-            res = httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
-            if res.status_code in [200, 201]: st.rerun()
+            httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
+            st.rerun()
         except:
             st.error("Erro na conexão com o banco.")
 
@@ -94,15 +97,13 @@ if tarefas:
     concluidas = sum(1 for t in tarefas if t.get('feita'))
     percentual = concluidas / total
     
-    # Barra de Progresso
-    st.markdown(f"### Progresso: **{int(percentual * 100)}%**")
+    st.subheader(f"Progresso: {int(percentual * 100)}%")
     st.progress(percentual)
     st.write("")
 
     for t in tarefas:
         c1, c2, c3 = st.columns([0.1, 0.75, 0.15])
         
-        # Checkbox
         feita = c1.checkbox("", value=t['feita'], key=f"id_{t['id']}", label_visibility="collapsed")
         if feita != t['feita']:
             httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": feita})
@@ -113,7 +114,7 @@ if tarefas:
         else:
             c2.markdown(f"**{t['nome']}** — ⏰ {t['horario']}")
             
-        # Excluir individual
+        # Excluir individualmente
         if c3.button("🗑️", key=f"del_{t['id']}"):
             httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers)
             st.rerun()
