@@ -2,14 +2,11 @@ import streamlit as st
 import httpx
 import pandas as pd
 from datetime import datetime, date, timedelta
+import hashlib
 
-# --- 1. CONFIGURAÇÃO DE ACESSO (SECRETS) ---
-try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"].strip("/")
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-except Exception:
-    st.error("Erro: Credenciais não encontradas nos Secrets.")
-    st.stop()
+# --- CONFIGURAÇÃO ---
+SUPABASE_URL = st.secrets["SUPABASE_URL"].strip("/")
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
 headers = {
     "apikey": SUPABASE_KEY,
@@ -18,117 +15,113 @@ headers = {
     "Prefer": "return=minimal"
 }
 
-st.set_page_config(page_title="WN Tarefas", page_icon="🎯", layout="centered")
+st.set_page_config(page_title="WN Tarefas Pro", page_icon="🎯", layout="centered")
 
-# --- 2. ESTILIZAÇÃO CSS ---
+# --- FUNÇÕES DE SEGURANÇA ---
+def hash_senha(senha):
+    return hashlib.sha256(str.encode(senha)).hexdigest()
+
+def realizar_login(email, senha):
+    res = httpx.get(f"{SUPABASE_URL}/rest/v1/perfis?email=eq.{email}&senha=eq.{hash_senha(senha)}", headers=headers)
+    usuarios = res.json()
+    return usuarios[0] if usuarios else None
+
+# --- ESTILIZAÇÃO ---
 st.markdown("""
     <style>
-    .logo-container { display: flex; justify-content: center; padding: 10px 0 30px 0; }
-    .logo-box { background: linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%); padding: 10px 25px; border-radius: 15px; }
-    .logo-text { color: white !important; font-weight: 800; font-size: 32px; text-transform: uppercase; margin: 0; }
-    div.stButton > button { border-radius: 10px; font-weight: 600; }
+    .logo-box { background: linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%); padding: 10px 25px; border-radius: 15px; text-align: center; }
+    .logo-text { color: white !important; font-weight: 800; font-size: 30px; margin: 0; }
     </style>
     """, unsafe_allow_html=True)
 
-st.markdown('<div class="logo-container"><div class="logo-box"><p class="logo-text">🎯 WN Tarefas</p></div></div>', unsafe_allow_html=True)
+# --- GERENCIAMENTO DE SESSÃO (LOGIN) ---
+if "usuario" not in st.session_state:
+    st.session_state.usuario = None
 
-if "edit_id" not in st.session_state:
-    st.session_state.edit_id = None
+if st.session_state.usuario is None:
+    st.markdown('<div class="logo-box"><p class="logo-text">🎯 WN LOGIN</p></div>', unsafe_allow_html=True)
+    tab_login, tab_cad = st.tabs(["Acessar", "Criar Conta"])
+    
+    with tab_login:
+        with st.form("login"):
+            e = st.text_input("E-mail")
+            s = st.text_input("Senha", type="password")
+            if st.form_submit_button("Entrar", use_container_width=True):
+                u = realizar_login(e, s)
+                if u:
+                    st.session_state.usuario = u
+                    st.rerun()
+                else: st.error("Usuário ou senha inválidos")
 
-# --- 3. ABAS ---
-aba_hoje, aba_historico = st.tabs(["🚀 HOJE", "📊 HISTÓRICO & ANÁLISE"])
+    with tab_cad:
+        with st.form("cadastro"):
+            novo_e = st.text_input("E-mail")
+            novo_s = st.text_input("Senha", type="password")
+            zap = st.text_input("WhatsApp (Ex: 5511999999999)")
+            if st.form_submit_button("Cadastrar"):
+                payload = {"email": novo_e, "senha": hash_senha(novo_s), "whatsapp": zap}
+                httpx.post(f"{SUPABASE_URL}/rest/v1/perfis", headers=headers, json=payload)
+                st.success("Conta criada! Acesse a aba de Login.")
+    st.stop()
 
-# --- ABA HOJE ---
-with aba_hoje:
-    with st.form("form_tarefa", clear_on_submit=True):
-        st.subheader("✏️" if st.session_state.edit_id else "🆕 Tarefa")
-        nome = st.text_input("O que vamos realizar?", key="input_nome")
+# --- APP LOGADO ---
+u_id = st.session_state.usuario['email']
+u_zap = st.session_state.usuario.get('whatsapp', '')
+
+st.sidebar.write(f"Logado como: **{u_id}**")
+if st.sidebar.button("Sair"):
+    st.session_state.usuario = None
+    st.rerun()
+
+st.markdown('<div class="logo-box"><p class="logo-text">🎯 WN TAREFAS</p></div>', unsafe_allow_html=True)
+aba1, aba2 = st.tabs(["🚀 HOJE", "📊 HISTÓRICO"])
+
+with aba1:
+    with st.form("nova_tarefa"):
+        nome = st.text_input("O que vamos fazer?")
         c1, c2 = st.columns(2)
-        ini = c1.time_input("Início", value=datetime.now().time(), step=300)
-        fim = c2.time_input("Fim", value=datetime.now().time(), step=300)
-        repetir = st.checkbox("Repetir diariamente")
+        ini = c1.time_input("Início")
+        fim = c2.time_input("Fim")
         
-        btn_salvar = st.form_submit_button("Salvar Tarefa", use_container_width=True)
-        if btn_salvar and nome:
-            horario = f"{ini.strftime('%H:%M')} - {fim.strftime('%H:%M')}"
-            payload = {"nome": nome, "horario": horario, "feita": False, "data": str(date.today()), "repetir": repetir}
-            if st.session_state.edit_id:
-                httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{st.session_state.edit_id}", headers=headers, json=payload)
-                st.session_state.edit_id = None
-            else:
-                httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
+        st.write("---")
+        col_zap, col_rep = st.columns(2)
+        avisar = col_zap.checkbox("🔔 Notificar no WhatsApp (15min antes)")
+        repetir = col_rep.checkbox("🔁 Repetir Diariamente")
+        
+        if st.form_submit_button("Agendar", use_container_width=True):
+            horario_ini = ini.strftime('%H:%M')
+            payload = {
+                "nome": nome, "horario": f"{horario_ini} - {fim.strftime('%H:%M')}",
+                "feita": False, "data": str(date.today()), "repetir": repetir,
+                "usuario_id": u_id, "avisar_zap": avisar
+            }
+            httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
+            # DICA: Aqui você enviaria o payload para um serviço como o n8n para agendar o Zap
             st.rerun()
 
-    st.divider()
-    
-    hoje_str = str(date.today())
+    # Listagem (Filtrada por usuário)
     try:
-        res = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?or=(data.eq.{hoje_str},repetir.eq.true)&order=horario.asc", headers=headers)
+        res = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_id}&data=eq.{date.today()}&order=horario.asc", headers=headers)
         tarefas = res.json()
-    except: tarefas = []
-
-    if tarefas:
         for t in tarefas:
-            col1, col2, col3 = st.columns([0.1, 0.7, 0.2])
-            feita = col1.checkbox("", value=t['feita'], key=f"h_{t['id']}", label_visibility="collapsed")
-            if feita != t['feita']:
-                httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": feita})
+            c1, c2, c3 = st.columns([0.1, 0.7, 0.2])
+            f = c1.checkbox("", value=t['feita'], key=t['id'])
+            if f != t['feita']:
+                httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": f})
                 st.rerun()
-            
-            label = f"~~{t['nome']}~~" if t['feita'] else f"**{t['nome']}**"
-            col2.markdown(f"{label} <br><small>⏰ {t['horario']}</small>", unsafe_allow_html=True)
-            
-            b_edit, b_del = col3.columns(2)
-            if b_edit.button("✏️", key=f"ed_{t['id']}"):
-                st.session_state.edit_id = t['id']
-                st.rerun()
-            if b_del.button("🗑️", key=f"dl_{t['id']}"):
+            zap_icon = "🔔" if t.get('avisar_zap') else ""
+            c2.write(f"{zap_icon} **{t['nome']}** ({t['horario']})")
+            if c3.button("🗑️", key=f"del_{t['id']}"):
                 httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers)
                 st.rerun()
-    else:
-        st.info("Nenhuma tarefa para hoje.")
+    except: st.write("Inicie sua jornada!")
 
-# --- ABA HISTÓRICO & ANÁLISE ---
-with aba_historico:
-    # 1. GRÁFICO DE PRODUTIVIDADE (Últimos 7 dias)
-    st.subheader("📈 Produtividade da Semana")
-    try:
-        data_limite = str(date.today() - timedelta(days=7))
-        res_graph = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?data=gte.{data_limite}&feita=eq.true", headers=headers)
-        dados_brutos = res_graph.json()
-        
-        if dados_brutos:
-            df = pd.DataFrame(dados_brutos)
-            df['data'] = pd.to_datetime(df['data']).dt.strftime('%d/%m')
-            contagem = df.groupby('data').size().reset_index(name='Concluídas')
-            st.bar_chart(contagem.set_index('data'), color="#4F46E5")
-        else:
-            st.write("Ainda não há dados suficientes para o gráfico.")
-    except:
-        st.write("Erro ao carregar gráfico.")
-
-    st.divider()
-
-    # 2. BUSCA E FILTROS
-    st.subheader("🔍 Encontrar Tarefas")
-    col_busca, col_data = st.columns([0.6, 0.4])
-    termo_busca = col_busca.text_input("Pesquisar por nome...", placeholder="Ex: Academia")
-    data_pesquisa = col_data.date_input("Filtrar por data", value=date.today())
-
-    try:
-        query_url = f"{SUPABASE_URL}/rest/v1/tarefas?data=eq.{str(data_pesquisa)}&order=horario.asc"
-        res_hist = httpx.get(query_url, headers=headers)
-        tarefas_hist = res_hist.json()
-
-        # Filtragem em tempo real (Search)
-        if termo_busca:
-            tarefas_hist = [t for t in tarefas_hist if termo_busca.lower() in t['nome'].lower()]
-
-        if tarefas_hist:
-            for t in tarefas_hist:
-                status = "✅" if t['feita'] else "⏳"
-                st.write(f"{status} **{t['horario']}** - {t['nome']}")
-        else:
-            st.warning("Nenhuma tarefa encontrada com esses critérios.")
-    except:
-        st.error("Erro ao buscar histórico.")
+with aba2:
+    st.subheader("Seu Histórico")
+    # Gráfico simples de barras
+    res_hist = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_id}&feita=eq.true", headers=headers)
+    df = pd.DataFrame(res_hist.json())
+    if not df.empty:
+        df_count = df.groupby('data').size()
+        st.bar_chart(df_count)
+    else: st.write("Sem dados para exibir ainda.")
