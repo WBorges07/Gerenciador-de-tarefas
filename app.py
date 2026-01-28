@@ -22,7 +22,6 @@ st.set_page_config(page_title="TaskFlow Pro", page_icon="☁️", layout="center
 # --- 2. ESTILIZAÇÃO PERSONALIZADA (CSS) ---
 st.markdown("""
     <style>
-    /* Estilização do botão Salvar */
     div.stButton > button:first-child {
         background-color: #4F46E5;
         color: white;
@@ -34,12 +33,18 @@ st.markdown("""
     }
     div.stButton > button:first-child:hover {
         background-color: #4338CA;
-        border-color: #4338CA;
         transform: translateY(-1px);
     }
-    /* Estilização da Barra de Progresso */
-    .stProgress > div > div > div > div {
-        background-color: #10B981;
+    /* Estilo para o botão de excluir unitário */
+    .stButton button[kind="secondary"] {
+        background-color: transparent;
+        color: #EF4444;
+        border: 1px solid #EF4444;
+        padding: 0.2rem 0.5rem;
+    }
+    .stButton button[kind="secondary"]:hover {
+        background-color: #EF4444;
+        color: white;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -50,24 +55,18 @@ st.title("☁️ TaskFlow Pro")
 with st.form("nova_tarefa", clear_on_submit=True):
     nome = st.text_input("Tarefa", placeholder="O que precisa ser feito?")
     col1, col2 = st.columns(2)
-    
-    # Horários com intervalo de 5 minutos
     ini = col1.time_input("Início", step=300)
     fim = col2.time_input("Fim", step=300)
-    
-    # Botão renomeado para "Salvar" com estilo profissional
     enviar = st.form_submit_button("Salvar", use_container_width=True)
 
     if enviar and nome:
         horario = f"{ini.strftime('%H:%M')} - {fim.strftime('%H:%M')}"
         payload = {"nome": nome, "horario": horario, "feita": False}
-        
         try:
-            res = httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
-            if res.status_code in [200, 201]:
-                st.rerun()
-        except Exception:
-            st.error("Erro ao conectar ao banco de dados.")
+            httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload)
+            st.rerun()
+        except:
+            st.error("Erro ao conectar ao banco.")
 
 st.divider()
 
@@ -79,34 +78,38 @@ except:
     tarefas = []
 
 if tarefas:
-    # Cálculo de progresso
+    # Barra de Progresso
     total = len(tarefas)
     concluidas = sum(1 for t in tarefas if t.get('feita'))
     percentual = concluidas / total
-    
     st.subheader(f"Progresso: {int(percentual * 100)}%")
     st.progress(percentual)
     st.write("")
 
     for t in tarefas:
-        c1, c2 = st.columns([0.1, 0.9])
+        # Criamos 3 colunas: Checkbox, Texto da Tarefa e Botão de Excluir
+        c1, c2, c3 = st.columns([0.1, 0.75, 0.15])
         
-        # Checkbox moderno
+        # Checkbox de status
         feita = c1.checkbox("", value=t['feita'], key=f"id_{t['id']}", label_visibility="collapsed")
-        
         if feita != t['feita']:
             httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": feita})
             st.rerun()
             
+        # Nome da tarefa
         if t['feita']:
             c2.markdown(f"~~{t['nome']} ({t['horario']})~~")
         else:
             c2.markdown(f"**{t['nome']}** — ⏰ {t['horario']}")
+            
+        # Botão de Excluir individual
+        if c3.button("🗑️", key=f"del_{t['id']}", help="Excluir esta tarefa"):
+            httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers)
+            st.rerun()
 
     st.write("")
-    # Botão de limpeza secundário
     if st.button("🗑️ Limpar Lista Completa", use_container_width=True):
         httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=not.is.null", headers=headers)
         st.rerun()
 else:
-    st.info("Sua lista está vazia! Adicione uma tarefa acima.")
+    st.info("Sua lista está vazia!")
