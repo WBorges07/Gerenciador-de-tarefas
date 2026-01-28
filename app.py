@@ -19,18 +19,23 @@ headers = {
 # Configuração da página
 st.set_page_config(page_title="WN tarefas", page_icon="📝", layout="centered")
 
-# --- 2. ESTILIZAÇÃO PERSONALIZADA (CSS PRO) ---
+# --- 2. ESTILIZAÇÃO PERSONALIZADA (CSS PRO - LOGO AMPLIADO) ---
 st.markdown("""
     <style>
-    /* Estilização do Logotipo WN tarefas */
+    /* Logotipo WN tarefas Ampliado e Centralizado */
+    .logo-container {
+        display: flex;
+        justify-content: center;
+        padding: 20px 0 40px 0;
+    }
     .logo-text {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        font-weight: 800;
-        font-size: 42px;
-        background: -webkit-linear-gradient(#4F46E5, #06B6D4);
+        font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 900;
+        font-size: 64px; /* Aumentado de 42px para 64px */
+        letter-spacing: -2px;
+        background: linear-gradient(90deg, #4F46E5, #06B6D4);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 20px;
         text-align: center;
     }
     
@@ -64,12 +69,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Título Estilizado
-st.markdown('<p class="logo-text">WN tarefas</p>', unsafe_allow_html=True)
+# Título Estilizado e Gigante
+st.markdown('<div class="logo-container"><p class="logo-text">WN tarefas</p></div>', unsafe_allow_html=True)
 
 # --- 3. INTERFACE DE ENTRADA ---
 with st.form("nova_tarefa", clear_on_submit=True):
-    nome = st.text_input("Tarefa", placeholder="O que vamos fazer hoje?")
+    nome = st.text_input("Tarefa", placeholder="O que vamos realizar agora?")
     col1, col2 = st.columns(2)
     # Seleção de 5 em 5 minutos
     ini = col1.time_input("Início", step=300)
@@ -129,4 +134,4 @@ if tarefas:
         httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=not.is.null", headers=headers)
         st.rerun()
 else:
-    st.info("Nenhuma tarefa pendente.")
+    st.info("Nenhuma tarefa cadastrada.")
