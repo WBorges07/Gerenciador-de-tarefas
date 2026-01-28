@@ -17,110 +17,151 @@ headers = {
     "Prefer": "return=minimal"
 }
 
-st.set_page_config(page_title="WN tarefas", page_icon="📝", layout="centered")
+# Configuração da página
+st.set_page_config(page_title="WN Tarefas", page_icon="🎯", layout="centered")
 
-# --- 2. ESTILIZAÇÃO CSS (LOGO MASTER E DESIGN) ---
+# --- 2. ESTILIZAÇÃO CSS PROFISSIONAL ---
 st.markdown("""
     <style>
-    .logo-master {
-        font-family: 'Arial Black', sans-serif;
-        font-weight: 900;
-        font-size: 100px;
-        line-height: 0.8;
-        letter-spacing: -5px;
-        text-align: center;
-        background: linear-gradient(135deg, #4F46E5, #06B6D4);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin: 40px 0;
+    /* Esconder menu padrão para um look mais clean */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* Logotipo Personalizado e Reduzido */
+    .logo-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 10px 0 30px 0;
+    }
+    .logo-box {
+        background: linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%);
+        padding: 10px 25px;
+        border-radius: 15px;
+        box-shadow: 0 10px 20px rgba(79, 70, 229, 0.2);
+    }
+    .logo-text {
+        font-family: 'Inter', sans-serif;
+        color: white !important;
+        font-weight: 800;
+        font-size: 32px;
+        letter-spacing: -1px;
+        margin: 0;
         text-transform: uppercase;
     }
-    div.stButton > button:first-child {
-        background-color: #4F46E5;
+
+    /* Botões Modernos */
+    div.stButton > button {
+        background: linear-gradient(90deg, #4F46E5, #4338CA);
         color: white;
-        border-radius: 12px;
-        height: 3rem;
-        font-weight: bold;
+        border-radius: 10px;
         border: none;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
+        transition: all 0.3s ease;
     }
-    @media (max-width: 640px) { .logo-master { font-size: 60px; } }
+    div.stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(79, 70, 229, 0.4);
+        color: white;
+    }
+
+    /* Estilização dos Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 20px;
+        justify-content: center;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        background-color: transparent;
+        border-radius: 4px 4px 0 0;
+        font-weight: 600;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-st.markdown('<h1 class="logo-master">WN<br>TAREFAS</h1>', unsafe_allow_html=True)
+# Exibição do Logotipo Customizado
+st.markdown("""
+    <div class="logo-container">
+        <div class="logo-box">
+            <p class="logo-text">🎯 WN Tarefas</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # --- 3. NAVEGAÇÃO POR ABAS ---
-aba_hoje, aba_calendario = st.tabs(["🚀 HOJE", "📅 CALENDÁRIO"])
+aba_hoje, aba_calendario = st.tabs(["🚀 HOJE", "📅 HISTÓRICO"])
 
 # --- ABA 1: TAREFAS DE HOJE ---
 with aba_hoje:
-    with st.form("nova_tarefa", clear_on_submit=True):
-        nome = st.text_input("O que vamos realizar agora?", placeholder="Digite a tarefa...")
-        col1, col2 = st.columns(2)
-        ini = col1.time_input("Início", step=300)
-        fim = col2.time_input("Fim", step=300)
-        enviar = st.form_submit_button("Salvar", use_container_width=True)
+    with st.container():
+        with st.form("nova_tarefa", clear_on_submit=True):
+            nome = st.text_input("O que vamos realizar?", placeholder="Ex: Reunião de Planejamento")
+            col1, col2 = st.columns(2)
+            ini = col1.time_input("Início", step=300)
+            fim = col2.time_input("Fim", step=300)
+            enviar = st.form_submit_button("Agendar Tarefa", use_container_width=True)
 
-        if enviar and nome:
-            horario = f"{ini.strftime('%H:%M')} - {fim.strftime('%H:%M')}"
-            payload = {
-                "nome": nome, 
-                "horario": horario, 
-                "feita": False, 
-                "data": str(date.today())
-            }
-            try:
-                # Mudança: Usamos um timeout maior para evitar o erro visual falso
-                res = httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload, timeout=10.0)
-                if res.status_code in [200, 201, 204]:
+            if enviar and nome:
+                horario = f"{ini.strftime('%H:%M')} - {fim.strftime('%H:%M')}"
+                payload = {
+                    "nome": nome, 
+                    "horario": horario, 
+                    "feita": False, 
+                    "data": str(date.today())
+                }
+                try:
+                    res = httpx.post(f"{SUPABASE_URL}/rest/v1/tarefas", headers=headers, json=payload, timeout=10.0)
                     st.rerun()
-            except Exception:
-                # Se salvou (mesmo com erro de rede), o rerun vai mostrar a tarefa
-                st.rerun()
+                except:
+                    st.rerun()
 
-    st.divider()
-
+    st.write("")
+    
     hoje_str = str(date.today())
     try:
-        # Busca tarefas do dia
         busca = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?data=eq.{hoje_str}&order=created_at", headers=headers)
         tarefas = busca.json() if busca.status_code == 200 else []
     except:
         tarefas = []
 
     if tarefas:
-        # Progresso atualizado
         total = len(tarefas)
         concluidas = sum(1 for t in tarefas if t.get('feita'))
         percentual = concluidas / total
-        st.markdown(f"### Progresso: **{int(percentual * 100)}%**")
+        
+        # Barra de Progresso Estilizada
+        st.markdown(f"**Sua Meta de Hoje: {int(percentual * 100)}%**")
         st.progress(percentual)
+        st.write("")
         
         for t in tarefas:
             c1, c2, c3 = st.columns([0.1, 0.75, 0.15])
-            feita = c1.checkbox("", value=t['feita'], key=f"h_{t['id']}", label_visibility="collapsed")
             
+            # Checkbox
+            feita = c1.checkbox("", value=t['feita'], key=f"h_{t['id']}", label_visibility="collapsed")
             if feita != t['feita']:
                 httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": feita})
                 st.rerun()
             
-            # Texto riscado se concluído
+            # Conteúdo da tarefa
             if t['feita']:
-                c2.markdown(f"~~{t['nome']} ({t['horario']})~~")
+                c2.markdown(f"<span style='color: gray; text-decoration: line-through;'>{t['nome']} ({t['horario']})</span>", unsafe_allow_html=True)
             else:
-                c2.markdown(f"**{t['nome']}** — ⏰ {t['horario']}")
+                c2.markdown(f"**{t['nome']}** <br> <small>⏰ {t['horario']}</small>", unsafe_allow_html=True)
             
-            # Lixeira individual
-            if c3.button("🗑️", key=f"del_{t['id']}"):
+            # Botão de deletar minimalista
+            if c3.button("🗑️", key=f"del_{t['id']}", help="Excluir tarefa"):
                 httpx.delete(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers)
                 st.rerun()
     else:
-        st.info("Nenhuma tarefa para hoje.")
+        st.info("Você ainda não tem tarefas para hoje. Que tal planejar seu dia?")
 
 # --- ABA 2: CALENDÁRIO ---
 with aba_calendario:
-    st.subheader("Histórico de Tarefas")
-    data_consulta = st.date_input("Escolha um dia", value=date.today())
+    st.markdown("### 🔍 Consultar Datas Anteriores")
+    data_consulta = st.date_input("Selecione o dia", value=date.today())
     
     try:
         res = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?data=eq.{str(data_consulta)}&order=created_at", headers=headers)
@@ -128,9 +169,11 @@ with aba_calendario:
     except:
         tarefas_hist = []
 
+    st.divider()
+
     if tarefas_hist:
         for t in tarefas_hist:
-            icone = "✅" if t['feita'] else "⏳"
-            st.write(f"{icone} **{t['nome']}** | {t['horario']}")
+            status = "✅" if t['feita'] else "⏳"
+            st.write(f"{status} **{t['nome']}** — {t['horario']}")
     else:
-        st.warning(f"Sem registros para o dia {data_consulta.strftime('%d/%m/%Y')}.")
+        st.warning(f"Não encontramos tarefas registradas para o dia {data_consulta.strftime('%d/%m/%Y')}.")
