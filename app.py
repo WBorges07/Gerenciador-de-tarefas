@@ -115,6 +115,10 @@ with aba1:
     with st.form("form_tarefa", clear_on_submit=True):
         st.write(f"### {titulo_f}")
         nome = st.text_input("O que vamos realizar?", placeholder="Ex: Academia, Reunião...")
+        
+        # --- CAMPO DE DATA DA TAREFA ---
+        data_escolhida = st.date_input("Para quando?", value=date.today())
+        
         c1, c2 = st.columns(2)
         ini = c1.time_input("Início", step=300)
         fim = c2.time_input("Fim", step=300)
@@ -127,7 +131,7 @@ with aba1:
                 horario = f"{ini.strftime('%H:%M')} - {fim.strftime('%H:%M')}"
                 payload = {
                     "nome": nome, "horario": horario, "feita": False,
-                    "data": str(date.today()), "repetir": rep,
+                    "data": str(data_escolhida), "repetir": rep,
                     "usuario_id": u_email
                 }
                 if st.session_state.edit_id:
@@ -146,7 +150,6 @@ with aba1:
 
     # Listagem de Hoje organizada por horário (Usamos a variável 'res_total' já carregada acima)
     if res_total:
-        # Ordenar localmente por horário para garantir a ordem na exibição
         tarefas_ordenadas = sorted(res_total, key=lambda x: x['horario'])
         
         for t in tarefas_ordenadas:
