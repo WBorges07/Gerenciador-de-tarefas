@@ -97,7 +97,7 @@ with aba1:
             concluidas = len([t for t in res_total if t['feita']])
             percentual = concluidas / total
             
-            st.markdown(f'<p class="progress-label">Progresso do Dia: {concluidas}/{total} ({int(percentual*100)}%)</p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="progress-label">Progresso do Dia ({date.today().strftime("%d/%m/%Y")}): {concluidas}/{total} ({int(percentual*100)}%)</p>', unsafe_allow_html=True)
             st.progress(percentual)
             
             if percentual == 1.0:
@@ -116,8 +116,8 @@ with aba1:
         st.write(f"### {titulo_f}")
         nome = st.text_input("O que vamos realizar?", placeholder="Ex: Academia, Reunião...")
         
-        # --- CAMPO DE DATA DA TAREFA ---
-        data_escolhida = st.date_input("Para quando?", value=date.today())
+        # Campo de Data formatado visualmente para o padrão BR
+        data_escolhida = st.date_input("Para quando?", value=date.today(), format="DD/MM/YYYY")
         
         c1, c2 = st.columns(2)
         ini = c1.time_input("Início", step=300)
@@ -148,13 +148,11 @@ with aba1:
 
     st.divider()
 
-    # Listagem de Hoje organizada por horário (Usamos a variável 'res_total' já carregada acima)
+    # Listagem de Hoje
     if res_total:
         tarefas_ordenadas = sorted(res_total, key=lambda x: x['horario'])
-        
         for t in tarefas_ordenadas:
             col_f, col_t, col_o = st.columns([0.1, 0.6, 0.3])
-            
             status = col_f.checkbox("", value=t['feita'], key=f"check_{t['id']}", label_visibility="collapsed")
             if status != t['feita']:
                 httpx.patch(f"{SUPABASE_URL}/rest/v1/tarefas?id=eq.{t['id']}", headers=headers, json={"feita": status})
@@ -177,7 +175,7 @@ with aba2:
     st.subheader("🔍 Localizar Tarefas")
     c_busca, c_data = st.columns([0.6, 0.4])
     termo = c_busca.text_input("Pesquisar nome...")
-    dt_f = c_data.date_input("Filtrar por dia", value=date.today())
+    dt_f = c_data.date_input("Filtrar por dia", value=date.today(), format="DD/MM/YYYY")
     
     try:
         res_h = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_email}&data=eq.{dt_f}&order=horario.asc", headers=headers).json()
@@ -187,7 +185,9 @@ with aba2:
         if res_h:
             for t in res_h:
                 status = "✅" if t['feita'] else "⏳"
-                st.write(f"{status} **{t['horario']}** - {t['nome']}")
+                # Formatação da data no texto de busca
+                data_formatada = datetime.strptime(t['data'], "%Y-%m-%d").strftime("%d/%m/%Y")
+                st.write(f"{status} **[{data_formatada}]** {t['horario']} - {t['nome']}")
         else:
             st.write("Nenhum registro encontrado.")
     except: pass
@@ -199,7 +199,8 @@ with aba2:
         res_g = httpx.get(f"{SUPABASE_URL}/rest/v1/tarefas?usuario_id=eq.{u_email}&data=gte.{limite}&feita=eq.true", headers=headers).json()
         if res_g:
             df = pd.DataFrame(res_g)
-            df['data'] = pd.to_datetime(df['data']).dt.strftime('%d/%m')
+            # Formatação do eixo X do gráfico para o padrão BR
+            df['data'] = pd.to_datetime(df['data']).dt.strftime('%d/%m/%Y')
             st.bar_chart(df.groupby('data').size(), color="#4F46E5")
     except:
         st.write("Ainda não há dados suficientes para gerar o gráfico.")
